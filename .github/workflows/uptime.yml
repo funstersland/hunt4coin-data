@@ -1,0 +1,27 @@
+# Checks hunt4coin.com every 5 minutes. A failed run means the site was down for ~2 minutes
+# or more; GitHub emails the repository owner about failed scheduled runs.
+name: Uptime check
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check key pages (3 tries, 45 s apart, so a deploy blip doesn't alert)
+        run: |
+          urls="https://hunt4coin.com/ https://hunt4coin.com/learn https://hunt4coin.com/llms.txt https://hunt4coin.com/robots.txt https://hunt4coin.com/api/status"
+          for attempt in 1 2 3; do
+            bad=""
+            for u in $urls; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -A 'hunt4coin-uptime-check' --max-time 20 "$u" || echo 000)
+              [ "$code" = "200" ] || bad="$bad $u=$code"
+            done
+            [ -z "$bad" ] && { echo "All up"; exit 0; }
+            echo "Attempt $attempt failed:$bad"
+            [ $attempt -lt 3 ] && sleep 45
+          done
+          echo "::error::hunt4coin.com is down:$bad"
+          exit 1
